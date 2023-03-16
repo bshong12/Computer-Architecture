@@ -1,0 +1,23 @@
+`timescale 0.1ns / 1ps
+module sram(clk, we, AR, din, dout);
+parameter
+    ADDR_WIDTH = 12, WORD_DEPTH = 4096, WORD_WIDTH = 16;
+
+input clk, we;
+input [ADDR_WIDTH-1:0] AR;
+input [WORD_WIDTH-1:0] din;
+
+output reg [WORD_WIDTH-1:0] dout;
+
+reg [WORD_WIDTH-1:0] mem [0:WORD_DEPTH-1];
+
+always@(posedge clk)begin
+    if(!we)
+      mem[AR] <= din;
+end
+
+always@(posedge clk)begin
+     #1 dout <= mem[AR];
+end
+
+endmodule
