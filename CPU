@@ -1,0 +1,147 @@
+`timescale 0.1ns / 1ps
+module cpu(clk, rst, we, AR, din, dout);
+
+parameter
+    ADDR_WIDTH = 12, WORD_DEPTH = 4096, WORD_WIDTH = 16;
+
+input clk, rst;
+reg [15:0] IR, PC, DR, AC;
+reg E, I;
+reg [7:0] d;
+reg [3:0] SC;
+
+output reg we;
+output reg [ADDR_WIDTH-1:0] AR;
+output reg [WORD_WIDTH-1:0] din;
+input [WORD_WIDTH-1:0] dout;
+
+always@(negedge rst)begin
+    if(!rst) begin
+        AR <= 16'd0;
+        IR <= 16'd0;
+        PC <= 16'd0;
+        DR <= 16'd0;
+        AC <= 16'd0;
+        SC <= 3'b000;
+        E <= 1'b0;
+    end
+end
+
+always@(posedge clk)begin
+    if(SC < 3'b111)
+        SC <= SC +3'b001;
+    else
+        SC <= 3'b000;
+end
+
+always@(posedge clk)begin
+    case(IR[14:12])
+        3'b000: d <= 8'b00000001;
+        3'b001: d <= 8'b00000010;
+        3'b010: d <= 8'b00000100;
+        3'b011: d <= 8'b00001000;
+        3'b100: d <= 8'b00010000;
+        3'b101: d <= 8'b00100000;
+        3'b110: d <= 8'b01000000;
+        3'b111: d <= 8'b10000000;
+    default: d<= 0;
+    endcase
+    end
+
+always@(posedge clk)begin
+    if(SC == 3'b000)begin   // T0
+        AR <= PC;
+        we <= 1'b1;           
+    end
+    else if(SC == 3'b001)begin     // T1        
+        IR <= dout;
+        PC <= PC + 16'd1;
+    end
+    else if(SC == 3'b010)begin     //T2
+        AR <= IR[11:0];
+        I <= IR[15];
+    end
+    else if(SC == 3'b011)begin     //T3        
+        if((d[7] == 1'b1) &&(I == 1'b0))begin     //D7I'T3 , register-reference instruction                        
+            if(IR[11:0] == 12'h800)begin    //AC <- 0
+                AC <= 16'd0;
+                SC <= 3'b000;
+            end
+            else if(IR[11:0] == 12'h400)begin   //E <-0
+                E <= 1'b0;
+                SC <= 3'b000;
+            end
+            else if(IR[11:0] == 12'h200)begin   //AC <- ~AC
+                AC <= ~AC;
+                SC <= 3'b000;
+            end
+            else if(IR[11:8] == 4'h1)begin   //LDC
+                AC <= IR[7:0];
+                SC <= 3'b000;
+            end
+            else if(IR[11:0] == 12'h080)begin   //shr AC
+                {AC[15], AC[14:0]} <= {E, AC[15:1]};
+                E <= AC[0];
+                SC <= 3'b000;
+            end
+            else if(IR[11:0] == 12'h040)begin   //shl AC
+                {AC[15:1], AC[0]} <= {AC[14:0], E};
+                E <= AC[15];
+                SC <= 3'b000;
+            end
+            else if(IR[11:0] == 12'h020)begin   //AC <- AC + 1
+                AC <= AC + 16'd1;
+                SC <= 3'b000;
+            end
+        end
+        else if((d[7] != 1'b1) && (I == 1'b1))     //D7'IT3 indirect address
+            AR <= dout;     
+        end
+    
+    else if(d[1] == 1)begin
+        if(SC == 3'b100)      // ADD (D1T4)
+            DR <= dout;
+        else if(SC == 3'b101)begin      // ADD (D1T5)
+            {E,AC} <= AC + DR;
+            SC <= 3'b000;
+        end
+    end
+    
+    else if(d[2] == 1)begin
+        if(SC == 3'b100)      // LDA (D2T4)
+            DR <= dout;
+        else if(SC == 3'b101)begin      // LDA (D2T5)
+            AC <= DR;
+            SC <= 3'b000;
+        end
+    end
+    
+    else if((d[3] == 1) && (SC == 3'b100))begin      // STA (D3T4)
+       we <= 1'b0;
+       din <= AC;
+       SC <= 3'b000;
+    end
+
+    else if((d[4] == 1) && (SC == 3'b100))begin      // BUN (D4T4)
+        PC <= AR;
+        SC <= 3'b000;
+    end
+    
+    else if(d[6] == 1)begin
+        if(SC == 3'b100)begin      // ISZ (D6T4)
+            DR <= dout;
+        end
+        else if(SC == 3'b101)begin      // ISZ (D6T5)
+            DR <= DR + 16'd1;
+        end
+        else if(SC == 3'b110)begin      // ISZ (D6T6)
+            we <= 1'b0;
+            din <= DR;
+                if(DR == 16'd0)begin
+                    PC <= PC +16'd1;
+                end
+            SC <= 3'b000;
+        end
+    end
+end
+endmodule
