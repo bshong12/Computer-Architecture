@@ -1,0 +1,33 @@
+`timescale 0.1ns / 1ps
+module tb_cpu();
+
+parameter
+    ADDR_WIDTH = 12, WORD_DEPTH = 4096, WORD_WIDTH = 16;
+    
+reg clk, rst;
+wire we;
+wire [ADDR_WIDTH-1:0] AR;
+wire [WORD_WIDTH-1:0] din;
+wire [WORD_WIDTH-1:0] dout;
+integer file_pointer;
+
+cpu cpu0(.clk(clk), .rst(rst), .we(we), .AR(AR), .din(din), .dout(dout));
+sram sram0(.clk(clk), .we(we), .AR(AR), .din(din), .dout(dout));
+
+always #5 clk = ~clk;
+initial begin
+    $readmemb("mem.txt", tb_cpu.sram0.mem);
+    $readmemh("score.txt", tb_cpu.sram0.mem,100);
+    
+    clk = 1'b0; rst = 1'b1; #1
+    rst = 1'b0; #1
+    rst = 1'b1; #2575
+    
+    file_pointer = $fopen("result.dat");
+    $fdisplay(file_pointer, "socre: %d", tb_cpu.sram0.mem[99]);
+   
+    $fclose(file_pointer);
+    $finish;
+end
+endmodule
+
